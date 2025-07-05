@@ -1,345 +1,670 @@
-# pygame - Python Game Library
-# Copyright (C) 2000-2001  Pete Shinners
-#
-# This library is free software; you can redistribute it and/or
-# modify it under the terms of the GNU Library General Public
-# License as published by the Free Software Foundation; either
-# version 2 of the License, or (at your option) any later version.
-#
-# This library is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# Library General Public License for more details.
-#
-# You should have received a copy of the GNU Library General Public
-# License along with this library; if not, write to the Free
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-#
-# Pete Shinners
-# pete@shinners.org
-"""Pygame is a set of Python modules designed for writing games.
-It is written on top of the excellent SDL library. This allows you
-to create fully featured games and multimedia programs in the python
-language. The package is highly portable, with games running on
-Windows, MacOS, OS X, BeOS, FreeBSD, IRIX, and Linux."""
-
-import sys
-import os
-
-# Choose Windows display driver
-if os.name == "nt":
-    pygame_dir = os.path.split(__file__)[0]
-
-    # pypy does not find the dlls, so we add package folder to PATH.
-    os.environ["PATH"] = os.environ["PATH"] + ";" + pygame_dir
-
-    # windows store python does not find the dlls, so we run this
-    if sys.version_info > (3, 8):
-        os.add_dll_directory(pygame_dir)  # only available in 3.8+
-
-    # cleanup namespace
-    del pygame_dir
-
-# when running under X11, always set the SDL window WM_CLASS to make the
-#   window managers correctly match the pygame window.
-elif "DISPLAY" in os.environ and "SDL_VIDEO_X11_WMCLASS" not in os.environ:
-    os.environ["SDL_VIDEO_X11_WMCLASS"] = os.path.basename(sys.argv[0])
-
-
-def _attribute_undefined(name):
-    raise RuntimeError(f"{name} is not available")
-
-
-class MissingModule:
-    _NOT_IMPLEMENTED_ = True
-
-    def __init__(self, name, urgent=0):
-        self.name = name
-        exc_type, exc_msg = sys.exc_info()[:2]
-        self.info = str(exc_msg)
-        self.reason = f"{exc_type.__name__}: {self.info}"
-        self.urgent = urgent
-        if urgent:
-            self.warn()
-
-    def __getattr__(self, var):
-        if not self.urgent:
-            self.warn()
-            self.urgent = 1
-        missing_msg = f"{self.name} module not available ({self.reason})"
-        raise NotImplementedError(missing_msg)
-
-    def __bool__(self):
-        return False
-
-    def warn(self):
-        msg_type = "import" if self.urgent else "use"
-        message = f"{msg_type} {self.name}: {self.info}\n({self.reason})"
-        try:
-            import warnings
-
-            level = 4 if self.urgent else 3
-            warnings.warn(message, RuntimeWarning, level)
-        except ImportError:
-            print(message)
-
-
-# we need to import like this, each at a time. the cleanest way to import
-# our modules is with the import command (not the __import__ function)
-# isort: skip_file
-
-# first, the "required" modules
-from pygame.base import *  # pylint: disable=wildcard-import; lgtm[py/polluting-import]
-from pygame.constants import *  # now has __all__ pylint: disable=wildcard-import; lgtm[py/polluting-import]
-from pygame.version import *  # pylint: disable=wildcard-import; lgtm[py/polluting-import]
-from pygame.rect import Rect
-from pygame.rwobject import encode_string, encode_file_path
-import pygame.surflock
-import pygame.color
-
-Color = pygame.color.Color
-import pygame.bufferproxy
-
-BufferProxy = pygame.bufferproxy.BufferProxy
-import pygame.math
-
-Vector2 = pygame.math.Vector2
-Vector3 = pygame.math.Vector3
-
-__version__ = ver
-
-# next, the "standard" modules
-# we still allow them to be missing for stripped down pygame distributions
-if get_sdl_version() < (2, 0, 0):
-    # cdrom only available for SDL 1.2.X
-    try:
-        import pygame.cdrom
-    except (ImportError, OSError):
-        cdrom = MissingModule("cdrom", urgent=1)
-
-try:
-    import pygame.display
-except (ImportError, OSError):
-    display = MissingModule("display", urgent=1)
-
-try:
-    import pygame.draw
-except (ImportError, OSError):
-    draw = MissingModule("draw", urgent=1)
-
-try:
-    import pygame.event
-except (ImportError, OSError):
-    event = MissingModule("event", urgent=1)
-
-try:
-    import pygame.image
-except (ImportError, OSError):
-    image = MissingModule("image", urgent=1)
-
-try:
-    import pygame.joystick
-except (ImportError, OSError):
-    joystick = MissingModule("joystick", urgent=1)
-
-try:
-    import pygame.key
-except (ImportError, OSError):
-    key = MissingModule("key", urgent=1)
-
-try:
-    import pygame.mouse
-except (ImportError, OSError):
-    mouse = MissingModule("mouse", urgent=1)
-
-try:
-    import pygame.cursors
-    from pygame.cursors import Cursor
-except (ImportError, OSError):
-    cursors = MissingModule("cursors", urgent=1)
-
-    def Cursor(*args):  # pylint: disable=unused-argument
-        _attribute_undefined("pygame.Cursor")
-
-
-try:
-    import pygame.sprite
-except (ImportError, OSError):
-    sprite = MissingModule("sprite", urgent=1)
-
-try:
-    import pygame.threads
-except (ImportError, OSError):
-    threads = MissingModule("threads", urgent=1)
-
-try:
-    import pygame.pixelcopy
-except (ImportError, OSError):
-    pixelcopy = MissingModule("pixelcopy", urgent=1)
-
-
-try:
-    from pygame.surface import Surface, SurfaceType
-except (ImportError, OSError):
-
-    def Surface(size, flags, depth, masks):  # pylint: disable=unused-argument
-        _attribute_undefined("pygame.Surface")
-
-    SurfaceType = Surface
-
-try:
-    import pygame.mask
-    from pygame.mask import Mask
-except (ImportError, OSError):
-    mask = MissingModule("mask", urgent=0)
-
-    def Mask(size, fill):  # pylint: disable=unused-argument
-        _attribute_undefined("pygame.Mask")
-
-
-try:
-    from pygame.pixelarray import PixelArray
-except (ImportError, OSError):
-
-    def PixelArray(surface):  # pylint: disable=unused-argument
-        _attribute_undefined("pygame.PixelArray")
-
-
-try:
-    from pygame.overlay import Overlay
-except (ImportError, OSError):
-
-    def Overlay(format, size):  # pylint: disable=unused-argument
-        _attribute_undefined("pygame.Overlay")
-
-
-try:
-    import pygame.time
-except (ImportError, OSError):
-    time = MissingModule("time", urgent=1)
-
-try:
-    import pygame.transform
-except (ImportError, OSError):
-    transform = MissingModule("transform", urgent=1)
-
-# lastly, the "optional" pygame modules
-if "PYGAME_FREETYPE" in os.environ:
-    try:
-        import pygame.ftfont as font
-
-        sys.modules["pygame.font"] = font
-    except (ImportError, OSError):
-        pass
-try:
-    import pygame.font
-    import pygame.sysfont
-
-    pygame.font.SysFont = pygame.sysfont.SysFont
-    pygame.font.get_fonts = pygame.sysfont.get_fonts
-    pygame.font.match_font = pygame.sysfont.match_font
-except (ImportError, OSError):
-    font = MissingModule("font", urgent=0)
-
-# try and load pygame.mixer_music before mixer, for py2app...
-try:
-    import pygame.mixer_music
-
-    # del pygame.mixer_music
-    # print("NOTE2: failed importing pygame.mixer_music in lib/__init__.py")
-except (ImportError, OSError):
-    pass
-
-try:
-    import pygame.mixer
-except (ImportError, OSError):
-    mixer = MissingModule("mixer", urgent=0)
-
-try:
-    import pygame.scrap
-except (ImportError, OSError):
-    scrap = MissingModule("scrap", urgent=0)
-
-try:
-    import pygame.surfarray
-except (ImportError, OSError):
-    surfarray = MissingModule("surfarray", urgent=0)
-
-try:
-    import pygame.sndarray
-except (ImportError, OSError):
-    sndarray = MissingModule("sndarray", urgent=0)
-
-try:
-    import pygame.fastevent
-except (ImportError, OSError):
-    fastevent = MissingModule("fastevent", urgent=0)
-
-# there's also a couple "internal" modules not needed
-# by users, but putting them here helps "dependency finder"
-# programs get everything they need (like py2exe)
-try:
-    import pygame.imageext
-
-    del pygame.imageext
-except (ImportError, OSError):
-    pass
-
-# this internal module needs to be included for dependency
-# finders, but can't be deleted, as some tests need it
-try:
-    import pygame.pkgdata
-
-except (ImportError, OSError):
-    pass
-
-
-def packager_imports():
-    """some additional imports that py2app/py2exe will want to see"""
-    import atexit
-    import numpy
-    import OpenGL.GL
-    import pygame.macosx
-    import pygame.colordict
-
-
-# make Rects pickleable
-
-import copyreg
-
-
-def __rect_constructor(x, y, w, h):
-    return Rect(x, y, w, h)
-
-
-def __rect_reduce(r):
-    assert isinstance(r, Rect)
-    return __rect_constructor, (r.x, r.y, r.w, r.h)
-
-
-copyreg.pickle(Rect, __rect_reduce, __rect_constructor)
-
-
-# make Colors pickleable
-def __color_constructor(r, g, b, a):
-    return Color(r, g, b, a)
-
-
-def __color_reduce(c):
-    assert isinstance(c, Color)
-    return __color_constructor, (c.r, c.g, c.b, c.a)
-
-
-copyreg.pickle(Color, __color_reduce, __color_constructor)
-
-# Thanks for supporting pygame. Without support now, there won't be pygame later.
-if "PYGAME_HIDE_SUPPORT_PROMPT" not in os.environ:
-    print(
-        "pygame {} (SDL {}.{}.{}, Python {}.{}.{})".format(  # pylint: disable=consider-using-f-string
-            ver, *get_sdl_version() + sys.version_info[0:3]
-        )
-    )
-    print("Hello from the pygame community. https://www.pygame.org/contribute.html")
-
-# cleanup namespace
-del pygame, os, sys, MissingModule, copyreg, packager_imports
+"""
+.. _statsrefmanual:
+
+==========================================
+Statistical functions (:mod:`scipy.stats`)
+==========================================
+
+.. currentmodule:: scipy.stats
+
+This module contains a large number of probability distributions,
+summary and frequency statistics, correlation functions and statistical
+tests, masked statistics, kernel density estimation, quasi-Monte Carlo
+functionality, and more.
+
+Statistics is a very large area, and there are topics that are out of scope
+for SciPy and are covered by other packages. Some of the most important ones
+are:
+
+- `statsmodels <https://www.statsmodels.org/stable/index.html>`__:
+  regression, linear models, time series analysis, extensions to topics
+  also covered by ``scipy.stats``.
+- `Pandas <https://pandas.pydata.org/>`__: tabular data, time series
+  functionality, interfaces to other statistical languages.
+- `PyMC <https://docs.pymc.io/>`__: Bayesian statistical
+  modeling, probabilistic machine learning.
+- `scikit-learn <https://scikit-learn.org/>`__: classification, regression,
+  model selection.
+- `Seaborn <https://seaborn.pydata.org/>`__: statistical data visualization.
+- `rpy2 <https://rpy2.github.io/>`__: Python to R bridge.
+
+
+Probability distributions
+=========================
+
+Each univariate distribution is an instance of a subclass of `rv_continuous`
+(`rv_discrete` for discrete distributions):
+
+.. autosummary::
+   :toctree: generated/
+
+   rv_continuous
+   rv_discrete
+   rv_histogram
+
+Continuous distributions
+------------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   alpha             -- Alpha
+   anglit            -- Anglit
+   arcsine           -- Arcsine
+   argus             -- Argus
+   beta              -- Beta
+   betaprime         -- Beta Prime
+   bradford          -- Bradford
+   burr              -- Burr (Type III)
+   burr12            -- Burr (Type XII)
+   cauchy            -- Cauchy
+   chi               -- Chi
+   chi2              -- Chi-squared
+   cosine            -- Cosine
+   crystalball       -- Crystalball
+   dgamma            -- Double Gamma
+   dpareto_lognorm   -- Double Pareto Lognormal
+   dweibull          -- Double Weibull
+   erlang            -- Erlang
+   expon             -- Exponential
+   exponnorm         -- Exponentially Modified Normal
+   exponweib         -- Exponentiated Weibull
+   exponpow          -- Exponential Power
+   f                 -- F (Snecdor F)
+   fatiguelife       -- Fatigue Life (Birnbaum-Saunders)
+   fisk              -- Fisk
+   foldcauchy        -- Folded Cauchy
+   foldnorm          -- Folded Normal
+   genlogistic       -- Generalized Logistic
+   gennorm           -- Generalized normal
+   genpareto         -- Generalized Pareto
+   genexpon          -- Generalized Exponential
+   genextreme        -- Generalized Extreme Value
+   gausshyper        -- Gauss Hypergeometric
+   gamma             -- Gamma
+   gengamma          -- Generalized gamma
+   genhalflogistic   -- Generalized Half Logistic
+   genhyperbolic     -- Generalized Hyperbolic
+   geninvgauss       -- Generalized Inverse Gaussian
+   gibrat            -- Gibrat
+   gompertz          -- Gompertz (Truncated Gumbel)
+   gumbel_r          -- Right Sided Gumbel, Log-Weibull, Fisher-Tippett, Extreme Value Type I
+   gumbel_l          -- Left Sided Gumbel, etc.
+   halfcauchy        -- Half Cauchy
+   halflogistic      -- Half Logistic
+   halfnorm          -- Half Normal
+   halfgennorm       -- Generalized Half Normal
+   hypsecant         -- Hyperbolic Secant
+   invgamma          -- Inverse Gamma
+   invgauss          -- Inverse Gaussian
+   invweibull        -- Inverse Weibull
+   irwinhall         -- Irwin-Hall
+   jf_skew_t         -- Jones and Faddy Skew-T
+   johnsonsb         -- Johnson SB
+   johnsonsu         -- Johnson SU
+   kappa4            -- Kappa 4 parameter
+   kappa3            -- Kappa 3 parameter
+   ksone             -- Distribution of Kolmogorov-Smirnov one-sided test statistic
+   kstwo             -- Distribution of Kolmogorov-Smirnov two-sided test statistic
+   kstwobign         -- Limiting Distribution of scaled Kolmogorov-Smirnov two-sided test statistic.
+   landau            -- Landau
+   laplace           -- Laplace
+   laplace_asymmetric    -- Asymmetric Laplace
+   levy              -- Levy
+   levy_l
+   levy_stable
+   logistic          -- Logistic
+   loggamma          -- Log-Gamma
+   loglaplace        -- Log-Laplace (Log Double Exponential)
+   lognorm           -- Log-Normal
+   loguniform        -- Log-Uniform
+   lomax             -- Lomax (Pareto of the second kind)
+   maxwell           -- Maxwell
+   mielke            -- Mielke's Beta-Kappa
+   moyal             -- Moyal
+   nakagami          -- Nakagami
+   ncx2              -- Non-central chi-squared
+   ncf               -- Non-central F
+   nct               -- Non-central Student's T
+   norm              -- Normal (Gaussian)
+   norminvgauss      -- Normal Inverse Gaussian
+   pareto            -- Pareto
+   pearson3          -- Pearson type III
+   powerlaw          -- Power-function
+   powerlognorm      -- Power log normal
+   powernorm         -- Power normal
+   rdist             -- R-distribution
+   rayleigh          -- Rayleigh
+   rel_breitwigner   -- Relativistic Breit-Wigner
+   rice              -- Rice
+   recipinvgauss     -- Reciprocal Inverse Gaussian
+   semicircular      -- Semicircular
+   skewcauchy        -- Skew Cauchy
+   skewnorm          -- Skew normal
+   studentized_range    -- Studentized Range
+   t                 -- Student's T
+   trapezoid         -- Trapezoidal
+   triang            -- Triangular
+   truncexpon        -- Truncated Exponential
+   truncnorm         -- Truncated Normal
+   truncpareto       -- Truncated Pareto
+   truncweibull_min  -- Truncated minimum Weibull distribution
+   tukeylambda       -- Tukey-Lambda
+   uniform           -- Uniform
+   vonmises          -- Von-Mises (Circular)
+   vonmises_line     -- Von-Mises (Line)
+   wald              -- Wald
+   weibull_min       -- Minimum Weibull (see Frechet)
+   weibull_max       -- Maximum Weibull (see Frechet)
+   wrapcauchy        -- Wrapped Cauchy
+
+The ``fit`` method of the univariate continuous distributions uses
+maximum likelihood estimation to fit the distribution to a data set.
+The ``fit`` method can accept regular data or *censored data*.
+Censored data is represented with instances of the `CensoredData`
+class.
+
+.. autosummary::
+   :toctree: generated/
+
+   CensoredData
+
+
+Multivariate distributions
+--------------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   multivariate_normal    -- Multivariate normal distribution
+   matrix_normal          -- Matrix normal distribution
+   dirichlet              -- Dirichlet
+   dirichlet_multinomial  -- Dirichlet multinomial distribution
+   wishart                -- Wishart
+   invwishart             -- Inverse Wishart
+   multinomial            -- Multinomial distribution
+   special_ortho_group    -- SO(N) group
+   ortho_group            -- O(N) group
+   unitary_group          -- U(N) group
+   random_correlation     -- random correlation matrices
+   multivariate_t         -- Multivariate t-distribution
+   multivariate_hypergeom -- Multivariate hypergeometric distribution
+   normal_inverse_gamma   -- Normal-inverse-gamma distribution
+   random_table           -- Distribution of random tables with given marginals
+   uniform_direction      -- Uniform distribution on S(N-1)
+   vonmises_fisher        -- Von Mises-Fisher distribution
+
+`scipy.stats.multivariate_normal` methods accept instances
+of the following class to represent the covariance.
+
+.. autosummary::
+   :toctree: generated/
+
+   Covariance             -- Representation of a covariance matrix
+
+
+Discrete distributions
+----------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   bernoulli                -- Bernoulli
+   betabinom                -- Beta-Binomial
+   betanbinom               -- Beta-Negative Binomial
+   binom                    -- Binomial
+   boltzmann                -- Boltzmann (Truncated Discrete Exponential)
+   dlaplace                 -- Discrete Laplacian
+   geom                     -- Geometric
+   hypergeom                -- Hypergeometric
+   logser                   -- Logarithmic (Log-Series, Series)
+   nbinom                   -- Negative Binomial
+   nchypergeom_fisher       -- Fisher's Noncentral Hypergeometric
+   nchypergeom_wallenius    -- Wallenius's Noncentral Hypergeometric
+   nhypergeom               -- Negative Hypergeometric
+   planck                   -- Planck (Discrete Exponential)
+   poisson                  -- Poisson
+   poisson_binom            -- Poisson Binomial
+   randint                  -- Discrete Uniform
+   skellam                  -- Skellam
+   yulesimon                -- Yule-Simon
+   zipf                     -- Zipf (Zeta)
+   zipfian                  -- Zipfian
+
+
+An overview of statistical functions is given below.  Many of these functions
+have a similar version in `scipy.stats.mstats` which work for masked arrays.
+
+Summary statistics
+==================
+
+.. autosummary::
+   :toctree: generated/
+
+   describe          -- Descriptive statistics
+   gmean             -- Geometric mean
+   hmean             -- Harmonic mean
+   pmean             -- Power mean
+   kurtosis          -- Fisher or Pearson kurtosis
+   mode              -- Modal value
+   moment            -- Central moment
+   lmoment
+   expectile         -- Expectile
+   skew              -- Skewness
+   kstat             --
+   kstatvar          --
+   tmean             -- Truncated arithmetic mean
+   tvar              -- Truncated variance
+   tmin              --
+   tmax              --
+   tstd              --
+   tsem              --
+   variation         -- Coefficient of variation
+   find_repeats
+   rankdata
+   tiecorrect
+   trim_mean
+   gstd              -- Geometric Standard Deviation
+   iqr
+   sem
+   bayes_mvs
+   mvsdist
+   entropy
+   differential_entropy
+   median_abs_deviation
+
+Frequency statistics
+====================
+
+.. autosummary::
+   :toctree: generated/
+
+   cumfreq
+   quantile
+   percentileofscore
+   scoreatpercentile
+   relfreq
+
+.. autosummary::
+   :toctree: generated/
+
+   binned_statistic     -- Compute a binned statistic for a set of data.
+   binned_statistic_2d  -- Compute a 2-D binned statistic for a set of data.
+   binned_statistic_dd  -- Compute a d-D binned statistic for a set of data.
+
+.. _hypotests:
+
+Hypothesis Tests and related functions
+======================================
+SciPy has many functions for performing hypothesis tests that return a
+test statistic and a p-value, and several of them return confidence intervals
+and/or other related information.
+
+The headings below are based on common uses of the functions within, but due to
+the wide variety of statistical procedures, any attempt at coarse-grained
+categorization will be imperfect. Also, note that tests within the same heading
+are not interchangeable in general (e.g. many have different distributional
+assumptions).
+
+One Sample Tests / Paired Sample Tests
+--------------------------------------
+One sample tests are typically used to assess whether a single sample was
+drawn from a specified distribution or a distribution with specified properties
+(e.g. zero mean).
+
+.. autosummary::
+   :toctree: generated/
+
+   ttest_1samp
+   binomtest
+   quantile_test
+   skewtest
+   kurtosistest
+   normaltest
+   jarque_bera
+   shapiro
+   anderson
+   cramervonmises
+   ks_1samp
+   goodness_of_fit
+   chisquare
+   power_divergence
+
+Paired sample tests are often used to assess whether two samples were drawn
+from the same distribution; they differ from the independent sample tests below
+in that each observation in one sample is treated as paired with a
+closely-related observation in the other sample (e.g. when environmental
+factors are controlled between observations within a pair but not among pairs).
+They can also be interpreted or used as one-sample tests (e.g. tests on the
+mean or median of *differences* between paired observations).
+
+.. autosummary::
+   :toctree: generated/
+
+   ttest_rel
+   wilcoxon
+
+Association/Correlation Tests
+-----------------------------
+
+These tests are often used to assess whether there is a relationship (e.g.
+linear) between paired observations in multiple samples or among the
+coordinates of multivariate observations.
+
+.. autosummary::
+   :toctree: generated/
+
+   linregress
+   pearsonr
+   spearmanr
+   pointbiserialr
+   kendalltau
+   chatterjeexi
+   weightedtau
+   somersd
+   siegelslopes
+   theilslopes
+   page_trend_test
+   multiscale_graphcorr
+
+These association tests and are to work with samples in the form of contingency
+tables. Supporting functions are available in `scipy.stats.contingency`.
+
+.. autosummary::
+   :toctree: generated/
+
+   chi2_contingency
+   fisher_exact
+   barnard_exact
+   boschloo_exact
+
+Independent Sample Tests
+------------------------
+Independent sample tests are typically used to assess whether multiple samples
+were independently drawn from the same distribution or different distributions
+with a shared property (e.g. equal means).
+
+Some tests are specifically for comparing two samples.
+
+.. autosummary::
+   :toctree: generated/
+
+   ttest_ind_from_stats
+   poisson_means_test
+   ttest_ind
+   mannwhitneyu
+   bws_test
+   ranksums
+   brunnermunzel
+   mood
+   ansari
+   cramervonmises_2samp
+   epps_singleton_2samp
+   ks_2samp
+   kstest
+
+Others are generalized to multiple samples.
+
+.. autosummary::
+   :toctree: generated/
+
+   f_oneway
+   tukey_hsd
+   dunnett
+   kruskal
+   alexandergovern
+   fligner
+   levene
+   bartlett
+   median_test
+   friedmanchisquare
+   anderson_ksamp
+
+Resampling and Monte Carlo Methods
+----------------------------------
+The following functions can reproduce the p-value and confidence interval
+results of most of the functions above, and often produce accurate results in a
+wider variety of conditions. They can also be used to perform hypothesis tests
+and generate confidence intervals for custom statistics. This flexibility comes
+at the cost of greater computational requirements and stochastic results.
+
+.. autosummary::
+   :toctree: generated/
+
+   monte_carlo_test
+   permutation_test
+   bootstrap
+   power
+
+Instances of the following object can be passed into some hypothesis test
+functions to perform a resampling or Monte Carlo version of the hypothesis
+test.
+
+.. autosummary::
+   :toctree: generated/
+
+   MonteCarloMethod
+   PermutationMethod
+   BootstrapMethod
+
+Multiple Hypothesis Testing and Meta-Analysis
+---------------------------------------------
+These functions are for assessing the results of individual tests as a whole.
+Functions for performing specific multiple hypothesis tests (e.g. post hoc
+tests) are listed above.
+
+.. autosummary::
+   :toctree: generated/
+
+   combine_pvalues
+   false_discovery_control
+
+
+The following functions are related to the tests above but do not belong in the
+above categories.
+
+Random Variables
+================
+
+.. autosummary::
+   :toctree: generated/
+
+   make_distribution
+   Normal
+   Uniform
+   Binomial
+   Mixture
+   order_statistic
+   truncate
+   abs
+   exp
+   log
+
+Quasi-Monte Carlo
+=================
+
+.. toctree::
+   :maxdepth: 4
+
+   stats.qmc
+
+Contingency Tables
+==================
+
+.. toctree::
+   :maxdepth: 4
+
+   stats.contingency
+
+Masked statistics functions
+===========================
+
+.. toctree::
+
+   stats.mstats
+
+
+Other statistical functionality
+===============================
+
+Transformations
+---------------
+
+.. autosummary::
+   :toctree: generated/
+
+   boxcox
+   boxcox_normmax
+   boxcox_llf
+   yeojohnson
+   yeojohnson_normmax
+   yeojohnson_llf
+   obrientransform
+   sigmaclip
+   trimboth
+   trim1
+   zmap
+   zscore
+   gzscore
+
+Statistical distances
+---------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   wasserstein_distance
+   wasserstein_distance_nd
+   energy_distance
+
+Sampling
+--------
+
+.. toctree::
+   :maxdepth: 4
+
+   stats.sampling
+
+Fitting / Survival Analysis
+---------------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   fit
+   ecdf
+   logrank
+
+Directional statistical functions
+---------------------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   directional_stats
+   circmean
+   circvar
+   circstd
+
+Sensitivity Analysis
+--------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   sobol_indices
+
+Plot-tests
+----------
+
+.. autosummary::
+   :toctree: generated/
+
+   ppcc_max
+   ppcc_plot
+   probplot
+   boxcox_normplot
+   yeojohnson_normplot
+
+Univariate and multivariate kernel density estimation
+-----------------------------------------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   gaussian_kde
+
+Warnings / Errors used in :mod:`scipy.stats`
+--------------------------------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   DegenerateDataWarning
+   ConstantInputWarning
+   NearConstantInputWarning
+   FitError
+
+Result classes used in :mod:`scipy.stats`
+-----------------------------------------
+
+.. warning::
+
+    These classes are private, but they are included here because instances
+    of them are returned by other statistical functions. User import and
+    instantiation is not supported.
+
+.. toctree::
+   :maxdepth: 2
+
+   stats._result_classes
+
+"""  # noqa: E501
+
+from ._warnings_errors import (ConstantInputWarning, NearConstantInputWarning,
+                               DegenerateDataWarning, FitError)
+from ._stats_py import *
+from ._variation import variation
+from .distributions import *
+from ._morestats import *
+from ._multicomp import *
+from ._binomtest import binomtest
+from ._binned_statistic import *
+from ._kde import gaussian_kde
+from . import mstats
+from . import qmc
+from ._multivariate import *
+from . import contingency
+from .contingency import chi2_contingency
+from ._censored_data import CensoredData
+from ._resampling import (bootstrap, monte_carlo_test, permutation_test, power,
+                          MonteCarloMethod, PermutationMethod, BootstrapMethod)
+from ._entropy import *
+from ._hypotests import *
+from ._page_trend_test import page_trend_test
+from ._mannwhitneyu import mannwhitneyu
+from ._bws_test import bws_test
+from ._fit import fit, goodness_of_fit
+from ._covariance import Covariance
+from ._sensitivity_analysis import *
+from ._survival import *
+from ._distribution_infrastructure import (
+    make_distribution, Mixture, order_statistic, truncate, exp, log, abs
+)
+from ._new_distributions import Normal, Uniform, Binomial
+from ._mgc import multiscale_graphcorr
+from ._correlation import chatterjeexi
+from ._quantile import quantile
+
+
+# Deprecated namespaces, to be removed in v2.0.0
+from . import (
+    biasedurn, kde, morestats, mstats_basic, mstats_extras, mvn, stats
+)
+
+
+__all__ = [s for s in dir() if not s.startswith("_")]  # Remove dunders.
+
+from scipy._lib._testutils import PytestTester
+test = PytestTester(__name__)
+del PytestTester
